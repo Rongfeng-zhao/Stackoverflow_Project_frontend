@@ -1,75 +1,51 @@
-import { useState } from 'react';
 import { EmptyState } from './components/EmptyState';
 import { ErrorState } from './components/ErrorState';
-import { Header } from './components/Header';
 import { LoadingState } from './components/LoadingState';
-import { NewsList } from './components/NewsList';
-import { PriceHistoryCard } from './components/PriceHistoryCard';
-import { SearchBar } from './components/SearchBar';
-import { SentimentCard } from './components/SentimentCard';
-import { StockInfoCard } from './components/StockInfoCard';
-import { SentimentApiError, fetchStockSentiment } from './services/stockSentimentApi';
-import type { DashboardStatus, StockSentimentResult } from './types/stock';
-import { sanitizeTickerInput } from './utils/ticker';
+import { Header } from './features/stock-analysis/components/Header';
+import { NewsList } from './features/stock-analysis/components/NewsList';
+import { PriceHistoryCard } from './features/stock-analysis/components/PriceHistoryCard';
+import { SearchBar } from './features/stock-analysis/components/SearchBar';
+import { SentimentCard } from './features/stock-analysis/components/SentimentCard';
+import { StockInfoCard } from './features/stock-analysis/components/StockInfoCard';
+import { sanitizeTickerInput } from './features/stock-analysis/api/stockAnalysisApi';
+import { useStockAnalysis } from './features/stock-analysis/hooks/useStockAnalysis';
 
-const exampleTickers = ['BHP', 'CBA', 'CSL', 'WES'];
+const exampleTickers = ['AAPL', 'MSFT', 'NVDA', 'TSLA'];
 
-function getErrorCopy(error: SentimentApiError | null, ticker: string) {
-  switch (error?.type) {
+function getErrorCopy(type: string | undefined, ticker: string, message?: string) {
+  switch (type) {
     case 'invalid_ticker':
       return {
-        title: 'Enter a valid ASX ticker',
+        title: 'Enter a valid US ticker',
         message:
-          'Use 3 to 4 uppercase letters for an ASX-listed company, such as BHP, CBA, CSL, or WES.',
+          'Use uppercase letters, dot, or hyphen for a common US ticker, such as AAPL, MSFT, NVDA, or BRK.B.',
+      };
+    case 'unsupported_market':
+      return {
+        title: 'Unsupported market',
+        message: 'This MVP currently supports US stocks only.',
+      };
+    case 'stock_not_found':
+      return {
+        title: 'Ticker not found',
+        message: `We could not find a supported US stock record for ${ticker}.`,
       };
     case 'no_news':
       return {
         title: 'No recent news found',
-        message: `We could not find enough recent news coverage for ${ticker}. Try one of the sample ASX tickers above.`,
-      };
-    case 'api_failure':
-      return {
-        title: 'Analysis service unavailable',
-        message:
-          'The mock analysis request failed. This state is ready for future API error handling and retry logic.',
+        message: `We could not find enough recent news coverage for ${ticker}. Try one of the sample tickers above.`,
       };
     default:
       return {
-        title: 'Something went wrong',
-        message: 'Please try another ASX ticker or retry the analysis.',
+        title: 'Analysis service unavailable',
+        message: message ?? 'The stock analysis request failed. Please try again shortly.',
       };
   }
 }
 
 function App() {
-  const [tickerInput, setTickerInput] = useState('');
-  const [status, setStatus] = useState<DashboardStatus>('idle');
-  const [result, setResult] = useState<StockSentimentResult | null>(null);
-  const [error, setError] = useState<SentimentApiError | null>(null);
-
-  const errorCopy = getErrorCopy(error, tickerInput);
-
-  const handleAnalyze = async (ticker = tickerInput) => {
-    setStatus('loading');
-    setError(null);
-
-    try {
-      const response = await fetchStockSentiment(ticker);
-      setResult(response.result);
-      setTickerInput(response.result.ticker);
-      setStatus('success');
-    } catch (caughtError) {
-      setResult(null);
-      setStatus('error');
-
-      if (caughtError instanceof SentimentApiError) {
-        setError(caughtError);
-        return;
-      }
-
-      setError(new SentimentApiError('api_failure', 'Unexpected sentiment analysis failure.'));
-    }
-  };
+  const { tickerInput, setTickerInput, status, result, error, analyze } = useStockAnalysis();
+  const errorCopy = getErrorCopy(error?.type, tickerInput, error?.message);
 
   return (
     <div className="min-h-screen">
@@ -78,10 +54,10 @@ function App() {
         <SearchBar
           value={tickerInput}
           onChange={(value) => setTickerInput(sanitizeTickerInput(value))}
-          onSubmit={() => void handleAnalyze()}
+          onSubmit={() => void analyze()}
           onQuickSelect={(ticker) => {
             setTickerInput(ticker);
-            void handleAnalyze(ticker);
+            void analyze(ticker);
           }}
           isLoading={status === 'loading'}
           exampleTickers={exampleTickers}
@@ -93,7 +69,7 @@ function App() {
           <ErrorState
             title={errorCopy.title}
             message={errorCopy.message}
-            onRetry={tickerInput ? () => void handleAnalyze(tickerInput) : undefined}
+            onRetry={tickerInput ? () => void analyze(tickerInput) : undefined}
           />
         ) : null}
 
@@ -102,16 +78,18 @@ function App() {
             <div className="grid gap-6 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
               <StockInfoCard stock={result} />
               <SentimentCard
-                sentiment={result.overall_sentiment}
+                sentiment={result.overallSentiment}
                 confidence={result.confidence}
-                articleCount={result.article_count}
-                positiveCount={result.sentiment_summary?.positive_count}
-                negativeCount={result.sentiment_summary?.negative_count}
+                articleCount={result.articleCount}
+                positiveCount={result.positiveCount}
+                negativeCount={result.negativeCount}
+                neutralCount={result.neutralCount}
+                modelName={result.modelName}
               />
             </div>
 
-            <PriceHistoryCard points={result.price_history ?? []} currency={result.currency} />
-            <NewsList items={result.news_items} />
+            <PriceHistoryCard points={result.priceHistory} currency={result.currency} />
+            <NewsList items={result.newsItems} provider={result.newsProvider} />
           </section>
         ) : null}
       </main>

@@ -1,69 +1,52 @@
-# ASX Sentiment Backend
+# FastAPI Backend
 
-Minimal FastAPI backend for the frontend dashboard.
+US stock analysis backend for the frontend MVP.
 
-## Endpoints
+## Endpoint
 
-- `GET /health`
-- `GET /api/stock-analysis?ticker=BHP`
-- `GET /sentiment?ticker=BHP`
-- `GET /market-overview`
-- `POST /predict-text`
+```http
+GET /api/stock-analysis?market=US&ticker=AAPL
+```
 
-`/api/stock-analysis` is the frontend-facing MVP endpoint. It accepts one ASX ticker and returns:
+## Providers
 
-- `stock_info`
-- `price_history`
-- `sentiment_summary`
-- `news_items`
+- Price and company profile: Finnhub
+- Primary news: Finnhub company news
+- Fallback news: NewsAPI
+- Optional fallback news: Alpha Vantage News Sentiment
+- Sentiment classifier: local rule-based placeholder
 
-The current sentiment logic is a placeholder that mimics the future binary classification model. Replace the marked section in `app/services.py` with the real model call when the trained model is wrapped by the backend.
-
-AI summary generation is intentionally out of scope for the current MVP.
-
-## Run locally
+## Setup
 
 ```bash
 cd backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8088
+cp .env.example .env
+uvicorn app.main:app --reload --port 8000
 ```
 
 ## Environment
 
-Create `backend/.env` from the template:
-
-```bash
-cp .env.example .env
-```
-
-Then add your key:
-
 ```env
-NEWS_API_KEY=your_newsapi_key_here
+FINNHUB_API_KEY=
+NEWSAPI_KEY=
+ALPHA_VANTAGE_API_KEY=
+CORS_ORIGINS=http://localhost:5173
 ```
 
-If you want the shell to load it before running:
+## Health Check
 
-```bash
-export $(grep -v '^#' .env | xargs)
-uvicorn app.main:app --reload --port 8088
+```http
+GET /health
 ```
 
-## Frontend connection
+## Error Codes
 
-Use this in the frontend `.env`:
-
-```env
-VITE_SENTIMENT_DATA_SOURCE=live
-VITE_SENTIMENT_API_BASE_URL=http://localhost:8088
-```
-
-## Notes
-
-- The backend now tries to fetch ASX-related company news from NewsAPI `everything` first.
-- If `NEWS_API_KEY` is missing or the provider fails, stock and market endpoints fall back to mock data.
-- Query mapping for ASX tickers lives in `app/ticker_mapping.py`.
-- `POST /predict-text` is included as a simple model-inference placeholder.
+- `invalid_ticker`
+- `unsupported_market`
+- `stock_not_found`
+- `no_news`
+- `provider_failure`
+- `invalid_provider_response`
